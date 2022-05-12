@@ -1,31 +1,71 @@
 #include <FastLED.h>
+#include "Maps.h"
 
-#define LED_PIN 8
+#define LED_PIN 13
 #define NUM_LEDS 256
-#define BRIGHTNESS 16
+#define BRIGHTNESS 10
+#define WALL wall_1
+#define WALL_SIZE wall_1_size
+#define BUTTON_1 8    //go up
+#define BUTTON_2 9    //go down
+#define BUTTON_3 10   //go left
+#define BUTTON_4 11   //go right
+
+byte button_state = 0;
+
+byte a[16][16];
+int crt_pos = -1;
+boolean generate = false;
 
 CRGB leds[NUM_LEDS];
+const byte debounce_delay = 100; //milliseconds to wait until stable
 
-const int wall_1[] = {240,239,207,176,175,144,143,112,111,80,79,48,47,16,15,238,206,242,205,178,146,141,109,82,77,50,18,13,204,179,115,76,235,180,148,75,11,234,117,
-53,21,182,137,105,200,168,87,55,40,8,248,199,167,88,56,230,166,121,57,38,165,133,122,90,58,228,187,164,132,91,36,220,131,99,92,67,35,3,226,130,66,190,161,158,
-129,65,255,224,223,192,191,160,159,128,127,96,64,63,32,31,0,241,243,244,245,246,247,249,250,251,252,253,254,14,12,10,9,7,6,5,4,2,1,201,169, 95,208};
+boolean debounce(int pin){
 
-const int wall_2[] = {240,241,239,208,207,175,144,143, 112, 111,80, 79, 48, 47, 16, 15,14,12,11,10,9,8,7,6,5,4,3,1,0,2,17,20,30,31,46,45,43,40,41,39,38,37,35,33,
-32,49,50,54,58,62,63,78,77,75,73,71,69,64,66,81,82,84,86,88,90,92,95,107,103,101,96,98,114,115,116,117,118,119,122,126,127,141,140,139,138,137,136,133,
-132,128,147,151,153,154,155,159,174,172,170,168,165,162,160,164,206,176,177,179,181,184,187,190,191,201,192,210,213,216,218,219,222,223,236,227,225,224,242,243,
-244,245,246,247,248,249,250,251,252,254,255, 253,13};
+  boolean state;
+  boolean previous_state;
 
-const int wall_3[] = {240,239,208,207,176,175,144,143,112,111,121,80,79,48,47,16,15,14,13,12,11,10,9,8,7,6,5,4,3,2,1,0,23,29,45,44,42,40,38,36,34,32,51,53,55,57,59,61,63,
-77,76,74,72,70,68,66,64,82,83,85,87,89,91,95,109,106,100,99,98,96,113,114,117,118,119,120,127,134,133,132,129,128,145,146,147,148,149,150,151,153,154,155,156,157,
-158,159,168,166,160,177,178,179,180,181,182,183,185,186,187,188,189,190,191,200,198,193,192,210,211,213,218,220,222,223,234,231,227,225,224,242,243,244,245,246,
-247,248,249,250,251,252,253,254,255, 31, 241};
+  previous_state = digitalRead(pin);
 
-int wall_1_size = sizeof(wall_1)/sizeof(wall_1[0]) - 2;
-int wall_2_size = sizeof(wall_2)/sizeof(wall_2[0]) - 2;
-int wall_3_size = sizeof(wall_3)/sizeof(wall_3[0]) - 2;
+  for(int cnt = 0; cnt < debounce_delay; cnt++){
 
+    delay(1);
+    state = digitalRead(pin);
 
-void generate_maze(const int wall[], int wall_size){
+    if(state != previous_state){
+
+      cnt = 0;
+      previous_state = state;
+    }
+  }
+
+  return state;
+}
+
+void matrix_init(){
+
+      byte cnt = 0;
+
+      for(int j = 15; j >= 0; j--){
+
+        if(j % 2 == 1){
+            for(int i = 15; i >= 0; i--){
+                a[i][j] = cnt;
+                cnt++;
+            }
+        }else{
+
+            for(int i = 0; i <= 15; i++){
+                a[i][j] = cnt;
+                cnt++;
+            }
+        }
+
+    }
+
+}
+
+void generate_maze(const byte wall[], byte wall_size){
 
    for(int i = 0; i < wall_size; i++){
     leds[wall[i]] = CRGB(255, 0, 0);   
@@ -33,23 +73,186 @@ void generate_maze(const int wall[], int wall_size){
 
   leds[wall[wall_size]] = CRGB(0, 255, 0);  //starting point
   leds[wall[wall_size+1]] = CRGB(255, 255, 255);  //finish
-  
+
+  crt_pos = wall[wall_size]; //current position = starting point
+}
+
+byte found_j(int pos){
+
+  for(int i = 0; i < 16; i++)
+    for(int j = 0; j < 16; j++){
+
+      if(a[i][j] == pos){
+        return j;
+      }
+    }
+}
+
+byte found_i(int pos){
+
+  for(int i = 0; i < 16; i++)
+    for(int j = 0; j < 16; j++){
+
+      if(a[i][j] == pos){
+        return i;
+      }
+    }
+}
+
+boolean is_wall(byte led, const byte wall[], byte wall_size){
+
+  for(int i = 0; i < wall_size; i++){
+    if(wall[i] == led){
+      return true;
+    }
+  }
+
+  return false;
+}
+
+void advance_up(const byte wall[], byte wall_size){
+
+  byte i = found_i(crt_pos);
+  byte j = found_j(crt_pos);
+
+  if(!is_wall(a[i-1][j], wall, wall_size + 1))
+  {     
+        // debugging session:
+        // Serial.print("in up: ");
+        // Serial.println(a[i-1][j]);
+        
+
+        leds[crt_pos] = CRGB::Black;
+        leds[a[i-1][j]] = CRGB(0, 255, 0);
+        crt_pos = a[i-1][j];
+
+        if(leds[wall[wall_size]] != CRGB(255, 0, 0))
+            leds[wall[wall_size]] = CRGB(255, 0, 0);
+
+        FastLED.show();
+
+  }
+
+}
+
+void advance_down(const byte wall[], byte wall_size){
+
+  byte i = found_i(crt_pos);
+  byte j = found_j(crt_pos);
+
+  if(!is_wall(a[i+1][j], wall, wall_size + 1))
+  {     
+        // debugging session:
+        // Serial.print("in down: ");
+        // Serial.println(a[i+1][j]);
+        
+
+        leds[crt_pos] = CRGB::Black;
+        leds[a[i+1][j]] = CRGB(0, 255, 0);
+        crt_pos = a[i+1][j];
+        
+        if(leds[wall[wall_size]] != CRGB(255, 0, 0))
+          leds[wall[wall_size]] = CRGB(255, 0, 0);
+        
+        FastLED.show();
+
+  }
+
+}
+
+void advance_left(const byte wall[], byte wall_size){
+
+  byte i = found_i(crt_pos);
+  byte j = found_j(crt_pos);
+
+  if(!is_wall(a[i][j-1], wall, wall_size + 1))
+  {     
+        // debugging session:
+        // Serial.print("in left: ");
+        // Serial.println(a[i][j-1]);
+        
+        leds[crt_pos] = CRGB::Black;
+        leds[a[i][j-1]] = CRGB(0, 255, 0);
+        crt_pos = a[i][j-1];
+
+        if(leds[wall[wall_size]] != CRGB(255, 0, 0))
+          leds[wall[wall_size]] = CRGB(255, 0, 0);
+
+        FastLED.show();
+
+  }
+
+}
+
+void advance_right(const byte wall[], byte wall_size){
+
+  byte i = found_i(crt_pos);
+  byte j = found_j(crt_pos);
+
+  if(!is_wall(a[i][j+1], wall, wall_size + 1))
+  {     
+        // debugging session:
+        // Serial.print("in right: ");
+        // Serial.println(a[i][j+1]);
+        
+
+        leds[crt_pos] = CRGB::Black;
+        leds[a[i][j+1]] = CRGB(0, 255, 0);
+        crt_pos = a[i][j+1];
+
+        if(leds[wall[wall_size]] != CRGB(255, 0, 0))
+          leds[wall[wall_size]] = CRGB(255, 0, 0);
+
+        FastLED.show();
+
+  }
+
 }
 
 void setup() {
   FastLED.addLeds<WS2812, LED_PIN, GRB>(leds, NUM_LEDS);
   FastLED.setBrightness(BRIGHTNESS);
 
+  pinMode(BUTTON_1, INPUT);
+  pinMode(BUTTON_2, INPUT);
+  pinMode(BUTTON_3, INPUT);
+  pinMode(BUTTON_4, INPUT);
+
+  
+  matrix_init();
+
   Serial.begin(9600);
 }
 
 void loop() {
   
-  //generate_maze(wall_1, wall_1_size);
-  //generate_maze(wall_2, wall_2_size);
-  generate_maze(wall_3, wall_3_size);
-  FastLED.show();
-  
+  if(!generate){
+    generate_maze(WALL, WALL_SIZE);
+    generate = true;
+    FastLED.show();
+    
+    //Serial.println(a[0][0]);
+    //Serial.println(is_wall(29, wall_3, wall_3_size));
+  }
 
-  
+  if(debounce(BUTTON_1)){
+
+    advance_up(WALL, WALL_SIZE);
+  }
+
+  if(debounce(BUTTON_2)){
+
+    advance_down(WALL, WALL_SIZE);
+  }
+
+  if(debounce(BUTTON_3)){
+
+    advance_right(WALL, WALL_SIZE);
+  }
+
+  if(debounce(BUTTON_4)){
+
+    advance_left(WALL, WALL_SIZE);
+  }
+
 }
