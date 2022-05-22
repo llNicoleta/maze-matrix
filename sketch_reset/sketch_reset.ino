@@ -4,10 +4,17 @@
 #define NUM_LEDS 256
 #define BRIGHTNESS 16
 
+int button_state = 0;
+int button_pin = 2;
+int led_pin = 8;
+
 CRGB leds[NUM_LEDS];
 
 void setup() {
   // put your setup code here, to run once:
+
+  pinMode(button_pin, INPUT);
+  pinMode(led_pin, OUTPUT);
 
   FastLED.addLeds<WS2812, LED_PIN, GRB>(leds, NUM_LEDS);
   FastLED.setBrightness(BRIGHTNESS);
@@ -18,8 +25,9 @@ void setup() {
 
 void loop() {
 
-  FastLED.clear();
-  FastLED.show();
-  // put your main code here, to run repeatedly:
+
+
+   FastLED.clear(true);
+   FastLED.show();
 
 }
